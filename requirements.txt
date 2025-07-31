@@ -1,0 +1,7 @@
+# requirements.txt 必须包含
+streamlit==1.32.2
+scikit-learn==1.4.0
+joblib==1.3.2
+shap==0.45.1
+matplotlib==3.8.0  # 必须明确指定版本
+loguru==0.7.2  # 必须指定版本
