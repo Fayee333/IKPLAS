@@ -47,13 +47,7 @@ def load_model():
             Path("resources") / "my_model.pkl"      # 资源文件夹
         ]
         
-        # 尝试查找并加载模型
-        for model_path in possible_paths:
-            if model_path.exists():
-                logger.info(f"找到模型文件: {model_path}")
-                model = joblib.load(model_path)
-                logger.info("模型加载成功")
-                return model
+       
         
         # 所有路径都找不到文件
         logger.error(f"未找到模型文件。检查位置: {[str(p) for p in possible_paths]}")
