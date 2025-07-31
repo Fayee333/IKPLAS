@@ -37,11 +37,11 @@ def load_model():
     try:
         # 尝试多种可能的模型位置（GitHub和Streamlit友好）
         possible_paths = [
-            Path("models") / "ikplas_model.pkl",    # GitHub推荐位置
+            Path("models") / "my_model.pkl",        # GitHub推荐位置
             Path("my_model.pkl"),                   # 根目录位置
-            Path("app") / "models" / "ikplas_model.pkl",# 多层级项目
-            Path("ikplas_app") / "ikplas_model.pkl",# Streamlit Cloud结构
-            Path("resources") / "ikplas_model.pkl"  # 资源文件夹
+            Path("app") / "models" / "my_model.pkl",# 多层级项目
+            Path("pneumonia_app") / "my_model.pkl", # Streamlit Cloud结构
+            Path("resources") / "my_model.pkl"      # 资源文件夹
         ]
         
         # 尝试查找并加载模型
