@@ -1,4 +1,4 @@
-# pneumonia_prediction_app.py
+# ikplas.py
 import streamlit as st
 import joblib
 import pandas as pd
@@ -21,21 +21,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 特征名称映射 - 修改为IKPLAS预测模型的特征
+# 特征名称映射 - 修改为模型训练时的特征名称
 FEATURE_MAPPING = {
     'SOFA': 'SOFA评分',
-    'D-dimer': 'D-二聚体 (mg/L)',
-    'Plt': '血小板计数 (×10^9/L)',
+    'D-Dimer': 'D-二聚体 (mg/L)',  # 使用大写连字符格式
+    'PLT': '血小板计数 (×10^9/L)',   # 使用全大写格式
     'Hb': '血红蛋白 (g/L)'
 }
 
+# 用户界面标签映射（显示名称到训练名称的映射）
+UI_TO_MODEL_MAPPING = {
+    'SOFA评分': 'SOFA',
+    'D-二聚体 (mg/L)': 'D-Dimer',
+    '血小板计数 (×10^9/L)': 'PLT',
+    '血红蛋白 (g/L)': 'Hb'
+}
+
 # ----------- 模型加载函数 -----------
-# 优化了模型加载，使用相对路径，更易于部署
 @st.cache_resource
 def load_model():
-    """健壮的模型加载函数，适用于不同部署环境"""
+    """健壮的模型加载函数"""
     try:
-        # 尝试多种可能的模型位置（GitHub和Streamlit友好）
+        # 尝试多种可能的模型位置
         possible_paths = [
             Path("models") / "my_model.pkl",        # GitHub推荐位置
             Path("my_model.pkl"),                   # 根目录位置
@@ -62,7 +69,6 @@ def load_model():
         if uploaded_file:
             try:
                 with st.spinner("处理上传文件中..."):
-                    # 保存上传的模型
                     save_path = Path("uploaded_model.pkl")
                     with open(save_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
@@ -73,7 +79,7 @@ def load_model():
                 st.error(f"上传文件处理失败: {str(e)}")
                 st.stop()
         
-        st.stop()  # 如果找不到模型且没有上传，则停止应用
+        st.stop()
         
     except Exception as e:
         logger.error(f"模型加载失败: {str(e)}", exc_info=True)
@@ -81,7 +87,6 @@ def load_model():
         st.stop()
 
 # ----------- 用户输入界面 -----------
-# 修改为IKPLAS预测模型的特征
 def user_input_features():
     with st.sidebar:
         st.header("⚕️ 患者参数输入")
@@ -90,31 +95,40 @@ def user_input_features():
         with st.expander("临床指标", expanded=True):
             sofa = st.slider('SOFA评分', 0, 24, 5, step=1, 
                             help="序贯器官衰竭评估(SOFA)评分范围0-24分，评分越高表示器官功能障碍越严重")
+            # 注意：模型特征名称为 "D-Dimer" (大写D和连字符)
             d_dimer = st.number_input('D-二聚体 (mg/L)', 0.0, 20.0, 1.5, step=0.1, 
                                      help="正常值通常<0.5mg/L，升高提示高凝状态和纤溶活性增强")
+            # 注意：模型特征名称为 "PLT" (全大写)
             plt = st.number_input('血小板计数 (×10^9/L)', 0, 1000, 200, step=10, 
                                  help="正常范围125-350×10^9/L，降低提示凝血功能障碍或消耗增加")
             hb = st.number_input('血红蛋白 (g/L)', 30, 200, 110, step=5, 
                                 help="正常范围男性130-175g/L，女性115-150g/L")
 
-    return pd.DataFrame([[sofa, d_dimer, plt, hb]],
-                      columns=FEATURE_MAPPING.keys())
+    # 使用模型期望的特征名称创建DataFrame
+    input_data = pd.DataFrame({
+        'SOFA': [sofa],
+        'D-Dimer': [d_dimer],  # 模型特征名称
+        'PLT': [plt],          # 模型特征名称
+        'Hb': [hb]
+    })
+    
+    return input_data
 
 # ----------- SHAP解释可视化 -----------
 def plot_shap_explanation(model, input_df):
     try:
-        # 确保树模型使用TreeExplainer，线性模型用KernelExplainer
+        # 检查是否为树模型
         if hasattr(model, 'tree_') or any(hasattr(model, est) for est in ['tree_', 'estimators_']):
             explainer = shap.TreeExplainer(model)
         else:
-            explainer = shap.KernelExplainer(model.predict, shap.sample(input_df, 10))
+            # 使用特征中位数作为背景
+            explainer = shap.KernelExplainer(model.predict, input_df.median().values.reshape(1, -1))
         
         # 计算SHAP值
         shap_values = explainer.shap_values(input_df)
         
         # 处理多分类/二分类
         if isinstance(shap_values, list) and len(shap_values) > 1:
-            # 假设第一类为负例（0），第二类为正例（侵袭综合征风险）
             base_value = explainer.expected_value[1]
             shap_vals = shap_values[1]
         else:
@@ -125,9 +139,9 @@ def plot_shap_explanation(model, input_df):
         plt.figure(figsize=(10, 4))
         shap.force_plot(
             base_value=base_value,
-            shap_values=shap_vals,
-            features=input_df.values,
-            feature_names=[FEATURE_MAPPING[c] for c in input_df.columns],
+            shap_values=shap_vals[0],
+            features=input_df.values[0],
+            feature_names=input_df.columns.tolist(),
             matplotlib=True,
             show=False,
             text_rotation=15,
@@ -146,16 +160,6 @@ def plot_shap_explanation(model, input_df):
 # ----------- 主界面 -----------
 def main():
     st.title("肺炎克雷伯菌肝脓肿进展为侵袭综合征风险预测")
-    st.markdown("""
-    <style>
-    .main .block-container {
-        max-width: 90%;
-    }
-    .st-bw {
-        padding: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
     st.markdown("---")
     
     # 添加病情背景说明
@@ -179,12 +183,12 @@ def main():
     # 获取输入
     input_df = user_input_features()
     
-    # 显示参数（使用漂亮的表格）
+    # 显示参数（使用漂亮的表格） - 使用UI友好的显示名称
     with st.expander("📋 当前输入参数", expanded=True):
-        # 创建漂亮的表格显示
+        # 创建更友好的显示名称
         display_data = {
-            "参数": [FEATURE_MAPPING[c] for c in input_df.columns],
-            "数值": input_df.values.flatten().tolist()
+            "参数": [FEATURE_MAPPING.get(col, col) for col in input_df.columns],
+            "数值": [input_df[col].values[0] for col in input_df.columns]
         }
         st.dataframe(pd.DataFrame(display_data), use_container_width=True)
     
@@ -199,6 +203,9 @@ def main():
     if predict_btn:
         with st.spinner('正在分析参数...'):
             try:
+                # 调试：显示实际输入的特征名称
+                st.info(f"模型输入特征: {', '.join(input_df.columns)}")
+                
                 # 预测概率
                 proba = model.predict_proba(input_df)[0][1]
                 
@@ -296,10 +303,7 @@ def main():
                     患者风险等级: {risk_level} ({risk_percentage})\n
                     推荐管理方案: {severity}风险方案\n\n
                     输入参数:\n
-                    {pd.DataFrame({
-                        "参数": [FEATURE_MAPPING[c] for c in input_df.columns],
-                        "数值": input_df.values.flatten().tolist()
-                    }).to_string(index=False)}
+                    {pd.DataFrame(display_data).to_string(index=False)}
                     """,
                     file_name=f"IKPLAS_风险评估_{risk_level}.txt",
                     mime="text/plain"
@@ -310,6 +314,14 @@ def main():
                 st.error("预测错误 - 请检查输入参数或模型")
                 st.info("技术细节错误:")
                 st.code(str(e))
+                
+                # 显示调试信息
+                if input_df is not None:
+                    st.info("输入数据预览:")
+                    st.dataframe(input_df)
+                    
+                    if hasattr(model, 'feature_names_in_'):
+                        st.info(f"模型期望的特征名称: {model.feature_names_in_}")
 
 # 主函数执行
 if __name__ == '__main__':
