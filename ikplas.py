@@ -48,7 +48,7 @@ def load_model():
         ]
         
         # 尝试查找并加载模型
-        for model_path in possible_paths:
+    for model_path in possible_paths:
             if model_path.exists():
                 logger.info(f"找到模型文件: {model_path}")
                 model = joblib.load(model_path)
