@@ -1,9 +1,7 @@
-
 # ikplas.py
 import streamlit as st
 import joblib
 import pandas as pd
-import shap
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
@@ -108,8 +106,6 @@ def user_input_features():
     
     return input_data
 
-
-
 # ----------- 主界面 -----------
 def main():
     st.title("肺炎克雷伯菌肝脓肿进展为侵袭综合征风险预测")
@@ -162,8 +158,6 @@ def main():
                     columns=MODEL_FEATURE_ORDER
                 )
                 
-                st.info(f"模型输入特征顺序: {model_input.columns.tolist()}")
-                
                 # 预测概率
                 proba = model.predict_proba(model_input)[0][1]
                 
@@ -203,20 +197,6 @@ def main():
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                # 特征重要性分析
-                st.subheader("📈 特征贡献分析")
-                fig = plot_shap_explanation(model, model_input)
-                if fig:
-                    st.pyplot(fig, use_container_width=True)
-                    st.caption("""
-                    ​**解释指南**:
-                    - → 红色箭头表示增加风险的因素
-                    - ← 蓝色箭头表示降低风险的因素
-                    - 箭头长度代表影响大小
-                    """)
-                else:
-                    st.warning("无法生成特征解释图")
                 
                 # 临床建议
                 st.markdown("---")
