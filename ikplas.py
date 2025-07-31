@@ -114,38 +114,36 @@ def plot_shap_explanation(model, input_df):
         # 检查是否为树模型
         if hasattr(model, 'tree_') or any(hasattr(model, est) for est in ['tree_', 'estimators_']):
             explainer = shap.TreeExplainer(model)
+            # 计算SHAP值
+            shap_values = explainer.shap_values(input_df)
+            
+            # 处理多分类/二分类
+            if isinstance(shap_values, list) and len(shap_values) > 1:
+                base_value = explainer.expected_value[1]
+                shap_vals = shap_values[1]
+            else:
+                base_value = explainer.expected_value if not isinstance(explainer.expected_value, list) else explainer.expected_value[0]
+                shap_vals = shap_values
+            
+            # 创建可视化
+            plt.figure(figsize=(10, 4))
+            shap.force_plot(
+                base_value=base_value,
+                shap_values=shap_vals[0],  # 注意：这里取第一个样本的SHAP值
+                features=input_df.values[0],
+                feature_names=input_df.columns.tolist(),
+                matplotlib=True,
+                show=False,
+                text_rotation=15,
+                plot_cmap=['#ff0051', '#008bfb']
+            )
+            
+            plt.tight_layout()
+            plt.gcf().set_facecolor('white')
+            return plt.gcf()
         else:
-            # 使用特征中位数作为背景
-            explainer = shap.KernelExplainer(model.predict, np.median(input_df.values.reshape(1, -1), 
-                                         link=shap.links.logit))
-        
-        # 计算SHAP值
-        shap_values = explainer.shap_values(input_df.values)
-        
-        # 处理多分类/二分类
-        if isinstance(shap_values, list) and len(shap_values) > 1:
-            base_value = explainer.expected_value[1]
-            shap_vals = shap_values[1]
-        else:
-            base_value = explainer.expected_value if not isinstance(explainer.expected_value, list) else explainer.expected_value[0]
-            shap_vals = shap_values
-        
-        # 创建可视化
-        plt.figure(figsize=(10, 4))
-        shap.force_plot(
-            base_value=base_value,
-            shap_values=shap_vals,
-            features=input_df.values[0],
-            feature_names=input_df.columns.tolist(),
-            matplotlib=True,
-            show=False,
-            text_rotation=15,
-            plot_cmap=['#ff0051', '#008bfb']
-        )
-        
-        plt.tight_layout()
-        plt.gcf().set_facecolor('white')
-        return plt.gcf()
+            st.warning("当前模型类型不支持SHAP解释。")
+            return None
     
     except Exception as e:
         logger.error(f"SHAP解释生成失败: {str(e)}", exc_info=True)
