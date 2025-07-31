@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import logging
+import numpy as np
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -29,13 +30,8 @@ FEATURE_MAPPING = {
     'Hb': '血红蛋白 (g/L)'
 }
 
-# 用户界面标签映射（显示名称到训练名称的映射）
-UI_TO_MODEL_MAPPING = {
-    'SOFA评分': 'SOFA',
-    'D-二聚体 (mg/L)': 'D-Dimer',
-    '血小板计数 (×10^9/L)': 'PLT',
-    '血红蛋白 (g/L)': 'Hb'
-}
+# 模型期望的特征顺序
+MODEL_FEATURE_ORDER = ['Hb', 'PLT', 'D-Dimer', 'SOFA']
 
 # ----------- 模型加载函数 -----------
 @st.cache_resource
@@ -43,7 +39,7 @@ def load_model():
     """健壮的模型加载函数"""
     try:
         # 尝试多种可能的模型位置
-        possible_paths = [
+         possible_paths = [
             Path("models") / "my_model.pkl",        # GitHub推荐位置
             Path("my_model.pkl"),                   # 根目录位置
             Path("app") / "models" / "my_model.pkl",# 多层级项目
@@ -95,22 +91,20 @@ def user_input_features():
         with st.expander("临床指标", expanded=True):
             sofa = st.slider('SOFA评分', 0, 24, 5, step=1, 
                             help="序贯器官衰竭评估(SOFA)评分范围0-24分，评分越高表示器官功能障碍越严重")
-            # 注意：模型特征名称为 "D-Dimer" (大写D和连字符)
             d_dimer = st.number_input('D-二聚体 (mg/L)', 0.0, 20.0, 1.5, step=0.1, 
                                      help="正常值通常<0.5mg/L，升高提示高凝状态和纤溶活性增强")
-            # 注意：模型特征名称为 "PLT" (全大写)
             plt = st.number_input('血小板计数 (×10^9/L)', 0, 1000, 200, step=10, 
                                  help="正常范围125-350×10^9/L，降低提示凝血功能障碍或消耗增加")
             hb = st.number_input('血红蛋白 (g/L)', 30, 200, 110, step=5, 
                                 help="正常范围男性130-175g/L，女性115-150g/L")
 
-    # 使用模型期望的特征名称创建DataFrame
-    input_data = pd.DataFrame({
-        'SOFA': [sofa],
-        'D-Dimer': [d_dimer],  # 模型特征名称
-        'PLT': [plt],          # 模型特征名称
-        'Hb': [hb]
-    })
+    # 使用模型期望的特征名称和顺序创建DataFrame
+    input_data = {
+        'SOFA': sofa,
+        'D-Dimer': d_dimer,
+        'PLT': plt,
+        'Hb': hb
+    }
     
     return input_data
 
@@ -122,10 +116,11 @@ def plot_shap_explanation(model, input_df):
             explainer = shap.TreeExplainer(model)
         else:
             # 使用特征中位数作为背景
-            explainer = shap.KernelExplainer(model.predict, input_df.median().values.reshape(1, -1))
+            explainer = shap.KernelExplainer(model.predict, np.median(input_df.values.reshape(1, -1), 
+                                         link=shap.links.logit))
         
         # 计算SHAP值
-        shap_values = explainer.shap_values(input_df)
+        shap_values = explainer.shap_values(input_df.values)
         
         # 处理多分类/二分类
         if isinstance(shap_values, list) and len(shap_values) > 1:
@@ -139,7 +134,7 @@ def plot_shap_explanation(model, input_df):
         plt.figure(figsize=(10, 4))
         shap.force_plot(
             base_value=base_value,
-            shap_values=shap_vals[0],
+            shap_values=shap_vals,
             features=input_df.values[0],
             feature_names=input_df.columns.tolist(),
             matplotlib=True,
@@ -181,14 +176,14 @@ def main():
     model = load_model()
     
     # 获取输入
-    input_df = user_input_features()
+    input_dict = user_input_features()
     
     # 显示参数（使用漂亮的表格） - 使用UI友好的显示名称
     with st.expander("📋 当前输入参数", expanded=True):
         # 创建更友好的显示名称
         display_data = {
-            "参数": [FEATURE_MAPPING.get(col, col) for col in input_df.columns],
-            "数值": [input_df[col].values[0] for col in input_df.columns]
+            "参数": [FEATURE_MAPPING.get(col, col) for col in input_dict.keys()],
+            "数值": list(input_dict.values())
         }
         st.dataframe(pd.DataFrame(display_data), use_container_width=True)
     
@@ -203,11 +198,16 @@ def main():
     if predict_btn:
         with st.spinner('正在分析参数...'):
             try:
-                # 调试：显示实际输入的特征名称
-                st.info(f"模型输入特征: {', '.join(input_df.columns)}")
+                # 按照模型期望的顺序准备输入数据
+                model_input = pd.DataFrame(
+                    [[input_dict['Hb'], input_dict['PLT'], input_dict['D-Dimer'], input_dict['SOFA']]],
+                    columns=MODEL_FEATURE_ORDER
+                )
+                
+                st.info(f"模型输入特征顺序: {model_input.columns.tolist()}")
                 
                 # 预测概率
-                proba = model.predict_proba(input_df)[0][1]
+                proba = model.predict_proba(model_input)[0][1]
                 
                 # 根据概率划分为三个风险等级
                 if proba < 0.3:
@@ -248,7 +248,7 @@ def main():
                 
                 # 特征重要性分析
                 st.subheader("📈 特征贡献分析")
-                fig = plot_shap_explanation(model, input_df)
+                fig = plot_shap_explanation(model, model_input)
                 if fig:
                     st.pyplot(fig, use_container_width=True)
                     st.caption("""
@@ -316,9 +316,10 @@ def main():
                 st.code(str(e))
                 
                 # 显示调试信息
-                if input_df is not None:
-                    st.info("输入数据预览:")
-                    st.dataframe(input_df)
+                st.info(f"输入字典内容: {input_dict}")
+                if 'model_input' in locals():
+                    st.info("模型输入数据预览:")
+                    st.dataframe(model_input)
                     
                     if hasattr(model, 'feature_names_in_'):
                         st.info(f"模型期望的特征名称: {model.feature_names_in_}")
