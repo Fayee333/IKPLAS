@@ -1,7 +1,4 @@
-# 在代码开头添加调试信息
-st.write(f"Python 版本: {sys.version}")
-st.write(f"当前工作目录: {os.getcwd()}")
-st.write(f"文件列表: {os.listdir()}")
+
 # ikplas.py
 import streamlit as st
 import joblib
