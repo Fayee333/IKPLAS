@@ -25,8 +25,8 @@ st.set_page_config(
 # 特征名称映射 - 修改为模型训练时的特征名称
 FEATURE_MAPPING = {
     'SOFA': 'SOFA评分',
-    'D-Dimer': 'D-二聚体 (mg/L)',  # 使用大写连字符格式
-    'PLT': '血小板计数 (×10^9/L)',   # 使用全大写格式
+    'D-Dimer': 'D-二聚体 (mg/L)',
+    'PLT': '血小板计数 (×10^9/L)',
     'Hb': '血红蛋白 (g/L)'
 }
 
@@ -48,7 +48,7 @@ def load_model():
         ]
         
         # 尝试查找并加载模型
-    for model_path in possible_paths:
+        for model_path in possible_paths:
             if model_path.exists():
                 logger.info(f"找到模型文件: {model_path}")
                 model = joblib.load(model_path)
@@ -98,7 +98,7 @@ def user_input_features():
             hb = st.number_input('血红蛋白 (g/L)', 30, 200, 110, step=5, 
                                 help="正常范围男性130-175g/L，女性115-150g/L")
 
-    # 使用模型期望的特征名称和顺序创建DataFrame
+    # 使用模型期望的特征名称和顺序创建数据
     input_data = {
         'SOFA': sofa,
         'D-Dimer': d_dimer,
