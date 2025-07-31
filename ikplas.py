@@ -1,3 +1,7 @@
+# 在代码开头添加调试信息
+st.write(f"Python 版本: {sys.version}")
+st.write(f"当前工作目录: {os.getcwd()}")
+st.write(f"文件列表: {os.listdir()}")
 # ikplas.py
 import streamlit as st
 import joblib
@@ -39,15 +43,20 @@ def load_model():
     """健壮的模型加载函数"""
     try:
         # 尝试多种可能的模型位置
-         possible_paths = [
-            Path("models") / "my_model.pkl",        # GitHub推荐位置
-            Path("my_model.pkl"),                   # 根目录位置
-            Path("app") / "models" / "my_model.pkl",# 多层级项目
-            Path("pneumonia_app") / "my_model.pkl", # Streamlit Cloud结构
-            Path("resources") / "my_model.pkl"      # 资源文件夹
+        possible_paths = [
+            Path("models") / "ikplas_model.pkl",
+            Path("ikplas_model.pkl"),
+            Path("app") / "models" / "ikplas_model.pkl",
+            Path("resources") / "ikplas_model.pkl"
         ]
         
-       
+        # 尝试查找并加载模型
+        for model_path in possible_paths:
+            if model_path.exists():
+                logger.info(f"找到模型文件: {model_path}")
+                model = joblib.load(model_path)
+                logger.info("模型加载成功")
+                return model
         
         # 所有路径都找不到文件
         logger.error(f"未找到模型文件。检查位置: {[str(p) for p in possible_paths]}")
